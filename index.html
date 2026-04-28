@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>충남대 풍속 예보</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121a30;
+      --text: #eef3ff;
+      --muted: #9aa7c7;
+      --grid: rgba(255,255,255,.10);
+      --avg: #7dd3fc;
+      --max: #fca5a5;
+      --line: rgba(255,255,255,.18);
+      --day: rgba(255,255,255,.035);
+      --midnight: rgba(255,255,255,.52);
+      --pill: rgba(255,255,255,.12);
+      --warn: #fbbf24;
+      --axisw: 68px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top left, #162242 0, var(--bg) 52%);
+      color: var(--text);
+    }
+    main {
+      width: min(1180px, calc(100vw - 28px));
+      margin: 24px auto;
+    }
+    .top {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(21px, 3vw, 32px);
+      letter-spacing: -0.03em;
+      font-weight: 750;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 5px;
+    }
+    button {
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.08);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-weight: 650;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button:hover { background: rgba(255,255,255,.13); }
+    button:disabled { opacity: .55; cursor: wait; }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .model-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(18,26,48,.72);
+      color: var(--text);
+      font-size: 13px;
+      user-select: none;
+      cursor: pointer;
+    }
+    .model-chip input {
+      width: 16px;
+      height: 16px;
+      accent-color: #7dd3fc;
+    }
+    .model-chip.unavailable {
+      opacity: .42;
+      cursor: not-allowed;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .card {
+      background: rgba(18,26,48,.82);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 18px 40px rgba(0,0,0,.22);
+    }
+    .label {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 7px;
+    }
+    .value {
+      font-size: clamp(34px, 5vw, 52px);
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.04em;
+    }
+    .unit {
+      font-size: .45em;
+      color: var(--muted);
+      margin-left: 5px;
+      font-weight: 650;
+    }
+    .chart-wrap {
+      background: rgba(18,26,48,.82);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: 0 18px 40px rgba(0,0,0,.22);
+    }
+    .chart-row {
+      display: flex;
+      align-items: stretch;
+      min-width: 0;
+    }
+    .axis-box {
+      flex: 0 0 var(--axisw);
+      width: var(--axisw);
+      height: 560px;
+      border-right: 1px solid rgba(255,255,255,.13);
+      background: rgba(18,26,48,.94);
+      z-index: 2;
+    }
+    .scroll-box {
+      flex: 1 1 auto;
+      width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 4px;
+      scrollbar-color: rgba(255,255,255,.28) rgba(255,255,255,.06);
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-x;
+    }
+    canvas {
+      display: block;
+      height: 560px;
+    }
+    #axis {
+      width: var(--axisw);
+    }
+    .legend {
+      display: flex;
+      gap: 18px;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 13px;
+      margin: 10px 0 0;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      display: inline-block;
+      margin-right: 6px;
+      vertical-align: -1px;
+    }
+    .avg { background: var(--avg); }
+    .max { background: var(--max); }
+    .status {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: right;
+      margin-top: 8px;
+      min-height: 18px;
+    }
+    .status.warning { color: var(--warn); }
+
+    @media (max-width: 640px) {
+      :root { --axisw: 56px; }
+      main { width: min(100vw - 18px, 1180px); margin-top: 14px; }
+      .top { align-items: start; flex-direction: column; }
+      .cards { grid-template-columns: 1fr; }
+      canvas, .axis-box { height: 460px; }
+      button { width: 100%; }
+      .controls { gap: 6px; }
+      .model-chip { font-size: 12px; padding: 7px 9px; }
+      .chart-wrap { padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="top">
+      <div>
+        <h1 id="title">충남대 풍속 예보</h1>
+        <div class="sub">10 m 기준 · 선택한 예보모델 집계 · m/s · 오른쪽 스크롤 가능</div>
+      </div>
+      <button id="refresh">새로고침</button>
+    </div>
+
+    <div id="controls" class="controls" aria-label="예보 모델 선택"></div>
+
+    <section class="cards" aria-label="현재 풍속 요약">
+      <div class="card">
+        <div class="label">평균풍속</div>
+        <div class="value"><span id="avgNow">--</span><span class="unit">m/s</span></div>
+      </div>
+      <div class="card">
+        <div class="label">최대풍속</div>
+        <div class="value"><span id="maxNow">--</span><span class="unit">m/s</span></div>
+      </div>
+    </section>
+
+    <section class="chart-wrap">
+      <div class="chart-row">
+        <div class="axis-box">
+          <canvas id="axis" aria-hidden="true"></canvas>
+        </div>
+        <div id="scrollBox" class="scroll-box">
+          <canvas id="chart" aria-label="평균풍속과 최대풍속 그래프"></canvas>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i class="dot avg"></i>평균풍속</span>
+        <span><i class="dot max"></i>최대풍속</span>
+      </div>
+    </section>
+    <div id="status" class="status"></div>
+  </main>
+
+<script>
+(() => {
+  // 기본 위치: 충남대학교 대전캠퍼스 중심부 근처
+  // 다른 위치로 쓰려면 URL 뒤에 ?lat=36.36997&lon=127.34789&name=충남대 처럼 붙이면 됩니다.
+  // 예보 기간을 바꾸려면 ?days=3 처럼 붙이면 됩니다. 기본 7일, 최대 7일.
+  const DEFAULT = { lat: 36.36997, lon: 127.34789, name: "충남대" };
+  const params = new URLSearchParams(location.search);
+  const POINT = {
+    lat: Number(params.get("lat")) || DEFAULT.lat,
+    lon: Number(params.get("lon")) || DEFAULT.lon,
+    name: params.get("name") || DEFAULT.name
+  };
+  const DAYS = Math.min(7, Math.max(1, Number(params.get("days")) || 7));
+  const HOURS_TO_SHOW = DAYS * 24;
+  const STORAGE_KEY = `cnu-wind-selected-models-v2`;
+
+  document.getElementById("title").textContent = `${POINT.name} 풍속 예보`;
+
+  const SOURCES = [
+    // Best Match는 평균이 아니라 Open-Meteo가 위치별로 적절한 고해상도 모델을 선택/조합한 기본 예보입니다.
+    { id: "best", name: "Best Match", url: "https://api.open-meteo.com/v1/forecast" },
+    { id: "kma",  name: "KMA",        url: "https://api.open-meteo.com/v1/kma" },
+    { id: "gfs",  name: "GFS",        url: "https://api.open-meteo.com/v1/gfs" },
+    { id: "icon", name: "ICON",       url: "https://api.open-meteo.com/v1/dwd-icon" },
+    { id: "ecmwf",name: "ECMWF",      url: "https://api.open-meteo.com/v1/ecmwf" }
+  ];
+
+  const dataCanvas = document.getElementById("chart");
+  const axisCanvas = document.getElementById("axis");
+  const ctx = dataCanvas.getContext("2d");
+  const axisCtx = axisCanvas.getContext("2d");
+  const scrollBox = document.getElementById("scrollBox");
+  const statusEl = document.getElementById("status");
+  const avgNowEl = document.getElementById("avgNow");
+  const maxNowEl = document.getElementById("maxNow");
+  const controlsEl = document.getElementById("controls");
+
+  let fetched = {};
+  let availableIds = new Set();
+  let selectedIds = loadSelectedIds();
+  let lastRows = null;
+  let lastYMax = 2;
+
+  initControls();
+
+  function loadSelectedIds() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const ids = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(ids) && ids.length) return new Set(ids);
+    } catch {}
+    return new Set(SOURCES.map(s => s.id));
+  }
+
+  function saveSelectedIds() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([...selectedIds]));
+    } catch {}
+  }
+
+  function initControls() {
+    controlsEl.innerHTML = "";
+    for (const source of SOURCES) {
+      const label = document.createElement("label");
+      label.className = "model-chip";
+      label.id = `chip-${source.id}`;
+
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = selectedIds.has(source.id);
+      input.id = `model-${source.id}`;
+      input.addEventListener("change", () => {
+        if (input.checked) selectedIds.add(source.id);
+        else selectedIds.delete(source.id);
+        saveSelectedIds();
+        renderFromSelection();
+      });
+
+      const span = document.createElement("span");
+      span.textContent = source.name;
+
+      label.appendChild(input);
+      label.appendChild(span);
+      controlsEl.appendChild(label);
+    }
+  }
+
+  function qs(source) {
+    const q = new URLSearchParams({
+      latitude: POINT.lat,
+      longitude: POINT.lon,
+      hourly: "wind_speed_10m,wind_gusts_10m",
+      wind_speed_unit: "ms",
+      timezone: "Asia/Seoul",
+      forecast_days: String(DAYS)
+    });
+    return `${source.url}?${q.toString()}`;
+  }
+
+  async function fetchSource(source) {
+    const res = await fetch(qs(source), { cache: "no-store" });
+    if (!res.ok) throw new Error(`${source.name}: HTTP ${res.status}`);
+    const j = await res.json();
+    if (j.error) throw new Error(`${source.name}: ${j.reason || "API error"}`);
+    if (!j.hourly?.time || !j.hourly?.wind_speed_10m) {
+      throw new Error(`${source.name}: wind data missing`);
+    }
+    return {
+      id: source.id,
+      name: source.name,
+      times: j.hourly.time,
+      speed: j.hourly.wind_speed_10m,
+      gust: j.hourly.wind_gusts_10m || j.hourly.wind_speed_10m
+    };
+  }
+
+  function roundHourKST(date = new Date()) {
+    const d = new Date(date);
+    d.setMinutes(0, 0, 0);
+    return d;
+  }
+
+  function keyOfLocalHour(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    const h = String(date.getHours()).padStart(2, "0");
+    return `${y}-${m}-${d}T${h}:00`;
+  }
+
+  function dateLabel(key) {
+    const dt = new Date(key);
+    const yoil = ["일", "월", "화", "수", "목", "금", "토"][dt.getDay()];
+    return `${key.slice(5, 7)}/${key.slice(8, 10)}(${yoil})`;
+  }
+
+  function aggregate(results) {
+    const nowHour = roundHourKST();
+    const hours = Array.from({ length: HOURS_TO_SHOW }, (_, i) => {
+      const d = new Date(nowHour);
+      d.setHours(d.getHours() + i);
+      return keyOfLocalHour(d);
+    });
+
+    const rows = hours.map(time => {
+      const speeds = [];
+      const gusts = [];
+      const used = [];
+
+      for (const r of results) {
+        const idx = r.times.indexOf(time);
+        if (idx >= 0) {
+          const s = Number(r.speed[idx]);
+          const g = Number(r.gust[idx]);
+          if (Number.isFinite(s)) speeds.push(s);
+          if (Number.isFinite(g)) gusts.push(g);
+          if (Number.isFinite(s) || Number.isFinite(g)) used.push(r.name);
+        }
+      }
+
+      return {
+        time,
+        date: time.slice(0, 10),
+        dateText: dateLabel(time),
+        hour: Number(time.slice(11, 13)),
+        avg: speeds.length ? mean(speeds) : null,
+        max: gusts.length ? Math.max(...gusts) : null,
+        n: Math.max(speeds.length, gusts.length),
+        used
+      };
+    }).filter(r => r.avg !== null || r.max !== null);
+
+    return rows;
+  }
+
+  function mean(arr) {
+    return arr.reduce((a, b) => a + b, 0) / arr.length;
+  }
+
+  function fmt(v) {
+    return Number.isFinite(v) ? v.toFixed(1) : "--";
+  }
+
+  function getPlot() {
+    const h = dataCanvas.getBoundingClientRect().height;
+    return {
+      top: 52,
+      bottom: 78,
+      height: Math.max(80, h - 52 - 78)
+    };
+  }
+
+  function fitDataCanvas(rows) {
+    const ratio = window.devicePixelRatio || 1;
+    const visibleWidth = scrollBox.clientWidth || 800;
+    const hourWidth = window.innerWidth < 640 ? 46 : 54;
+    const cssWidth = Math.max(visibleWidth, rows.length * hourWidth + 34);
+    dataCanvas.style.width = cssWidth + "px";
+
+    const rect = dataCanvas.getBoundingClientRect();
+    dataCanvas.width = Math.max(320, Math.floor(rect.width * ratio));
+    dataCanvas.height = Math.max(300, Math.floor(rect.height * ratio));
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  }
+
+  function fitAxisCanvas() {
+    const ratio = window.devicePixelRatio || 1;
+    const rect = axisCanvas.getBoundingClientRect();
+    axisCanvas.width = Math.max(48, Math.floor(rect.width * ratio));
+    axisCanvas.height = Math.max(300, Math.floor(rect.height * ratio));
+    axisCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  }
+
+  function draw(rows) {
+    fitDataCanvas(rows);
+    fitAxisCanvas();
+
+    const vals = rows.flatMap(r => [r.avg, r.max]).filter(Number.isFinite);
+    const maxVal = Math.max(2, ...vals);
+    const yMax = Math.ceil(maxVal * 1.18 * 2) / 2;
+    lastYMax = yMax;
+
+    drawAxis(yMax);
+    drawData(rows, yMax);
+  }
+
+  function drawAxis(yMax) {
+    const rect = axisCanvas.getBoundingClientRect();
+    const W = rect.width;
+    const H = rect.height;
+    const plot = getPlot();
+    const y = v => plot.top + plot.height - (v / yMax) * plot.height;
+
+    axisCtx.clearRect(0, 0, W, H);
+
+    // axis background
+    axisCtx.fillStyle = "rgba(18,26,48,.96)";
+    axisCtx.fillRect(0, 0, W, H);
+
+    axisCtx.font = "12px system-ui, -apple-system, Segoe UI, sans-serif";
+    axisCtx.strokeStyle = getCss("--grid");
+    axisCtx.fillStyle = getCss("--muted");
+    axisCtx.lineWidth = 1;
+
+    const ticks = 5;
+    axisCtx.textAlign = "right";
+    axisCtx.textBaseline = "middle";
+    for (let i = 0; i <= ticks; i++) {
+      const v = yMax * i / ticks;
+      const yy = y(v);
+      axisCtx.beginPath();
+      axisCtx.moveTo(W - 8, yy);
+      axisCtx.lineTo(W, yy);
+      axisCtx.stroke();
+      axisCtx.fillText(v.toFixed(1), W - 12, yy);
+    }
+
+    axisCtx.save();
+    axisCtx.fillStyle = getCss("--muted");
+    axisCtx.textAlign = "center";
+    axisCtx.textBaseline = "top";
+    axisCtx.translate(12, plot.top + plot.height / 2);
+    axisCtx.rotate(-Math.PI / 2);
+    axisCtx.fillText("풍속 (m/s)", 0, 0);
+    axisCtx.restore();
+  }
+
+  function drawData(rows, yMax) {
+    const rect = dataCanvas.getBoundingClientRect();
+    const W = rect.width;
+    const H = rect.height;
+    const plot = getPlot();
+    const padR = 28;
+    const plotW = W - padR;
+    const x = i => rows.length <= 1 ? 8 : 8 + ((plotW - 16) * i / (rows.length - 1));
+    const y = v => plot.top + plot.height - (v / yMax) * plot.height;
+
+    ctx.clearRect(0, 0, W, H);
+    drawDayBands(rows, x, plot, W, H);
+
+    ctx.font = "12px system-ui, -apple-system, Segoe UI, sans-serif";
+    ctx.lineWidth = 1;
+
+    // horizontal grid
+    ctx.strokeStyle = getCss("--grid");
+    const ticks = 5;
+    for (let i = 0; i <= ticks; i++) {
+      const v = yMax * i / ticks;
+      const yy = y(v);
+      ctx.beginPath();
+      ctx.moveTo(0, yy);
+      ctx.lineTo(W - padR, yy);
+      ctx.stroke();
+    }
+
+    // x labels
+    ctx.fillStyle = getCss("--muted");
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    rows.forEach((r, i) => {
+      const isDateStart = i === 0 || r.date !== rows[i - 1]?.date;
+      const show = isDateStart || r.hour === 6 || r.hour === 12 || r.hour === 18 || i === rows.length - 1;
+      if (!show) return;
+
+      const label = isDateStart ? `${r.dateText} ${String(r.hour).padStart(2, "0")}시` : `${String(r.hour).padStart(2, "0")}시`;
+      ctx.fillText(label, x(i), H - plot.bottom + 14);
+    });
+
+    drawLine(rows, r => r.avg, getCss("--avg"), x, y);
+    drawLine(rows, r => r.max, getCss("--max"), x, y);
+
+    const first = rows[0];
+    if (first) {
+      ctx.font = "12px system-ui, -apple-system, Segoe UI, sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      ctx.fillStyle = getCss("--avg");
+      ctx.fillText(`현재 평균 ${fmt(first.avg)}`, x(0) + 8, Math.max(18, y(first.avg) - 8));
+      ctx.fillStyle = getCss("--max");
+      ctx.fillText(`현재 최대 ${fmt(first.max)}`, x(0) + 8, Math.max(34, y(first.max) - 8));
+    }
+  }
+
+  function drawDayBands(rows, x, plot, W, H) {
+    if (!rows.length) return;
+
+    const groups = [];
+    let start = 0;
+
+    for (let i = 1; i <= rows.length; i++) {
+      if (i === rows.length || rows[i].date !== rows[start].date) {
+        groups.push({ start, end: i - 1, dateText: rows[start].dateText });
+        start = i;
+      }
+    }
+
+    groups.forEach((g, gi) => {
+      const left = g.start === 0 ? 0 : midpoint(x(g.start - 1), x(g.start));
+      const right = g.end === rows.length - 1 ? W : midpoint(x(g.end), x(g.end + 1));
+
+      if (gi % 2 === 1) {
+        ctx.fillStyle = getCss("--day");
+        ctx.fillRect(left, plot.top, right - left, plot.height);
+      }
+
+      const center = (left + right) / 2;
+      const pillW = Math.max(78, Math.min(116, right - left - 10));
+      const pillH = 24;
+      const pillX = center - pillW / 2;
+      const pillY = 14;
+
+      ctx.fillStyle = getCss("--pill");
+      roundRect(ctx, pillX, pillY, pillW, pillH, 11);
+      ctx.fill();
+
+      ctx.fillStyle = getCss("--text");
+      ctx.font = "700 12px system-ui, -apple-system, Segoe UI, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(g.dateText, center, pillY + pillH / 2);
+    });
+
+    groups.forEach((g, gi) => {
+      if (gi === 0) return;
+      const xx = midpoint(x(g.start - 1), x(g.start));
+      ctx.strokeStyle = getCss("--midnight");
+      ctx.lineWidth = 3;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(xx, plot.top - 8);
+      ctx.lineTo(xx, plot.top + plot.height + 12);
+      ctx.stroke();
+
+      ctx.strokeStyle = "rgba(255,255,255,.18)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([6, 7]);
+      ctx.beginPath();
+      ctx.moveTo(xx + 5, plot.top);
+      ctx.lineTo(xx + 5, plot.top + plot.height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    });
+  }
+
+  function midpoint(a, b) {
+    return (a + b) / 2;
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.lineTo(x + w - rr, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+    ctx.lineTo(x + w, y + h - rr);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+    ctx.lineTo(x + rr, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+    ctx.lineTo(x, y + rr);
+    ctx.quadraticCurveTo(x, y, x + rr, y);
+  }
+
+  function drawLine(rows, getter, color, x, y) {
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    let started = false;
+    rows.forEach((r, i) => {
+      const v = getter(r);
+      if (!Number.isFinite(v)) return;
+      if (!started) { ctx.moveTo(x(i), y(v)); started = true; }
+      else ctx.lineTo(x(i), y(v));
+    });
+    ctx.stroke();
+
+    rows.forEach((r, i) => {
+      const v = getter(r);
+      if (!Number.isFinite(v)) return;
+      ctx.beginPath();
+      ctx.arc(x(i), y(v), 3.0, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  function getCss(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function updateControlsAvailability() {
+    for (const source of SOURCES) {
+      const chip = document.getElementById(`chip-${source.id}`);
+      const input = document.getElementById(`model-${source.id}`);
+      const ok = availableIds.has(source.id);
+
+      input.disabled = !ok;
+      chip.classList.toggle("unavailable", !ok);
+
+      if (!ok) {
+        input.checked = false;
+        selectedIds.delete(source.id);
+      } else {
+        input.checked = selectedIds.has(source.id);
+      }
+    }
+    saveSelectedIds();
+  }
+
+  function renderFromSelection() {
+    const selectedResults = [...selectedIds]
+      .filter(id => availableIds.has(id))
+      .map(id => fetched[id]);
+
+    if (!selectedResults.length) {
+      avgNowEl.textContent = "--";
+      maxNowEl.textContent = "--";
+      statusEl.className = "status warning";
+      statusEl.textContent = "최소 1개 이상의 예보모델을 선택해야 합니다.";
+      lastRows = [];
+      draw([]);
+      return;
+    }
+
+    const rows = aggregate(selectedResults);
+    lastRows = rows;
+
+    const first = rows[0] || {};
+    avgNowEl.textContent = fmt(first.avg);
+    maxNowEl.textContent = fmt(first.max);
+    draw(rows);
+
+    const now = new Date();
+    const time = now.toLocaleString("ko-KR", { hour12: false });
+    statusEl.className = "status";
+    statusEl.textContent = `갱신 ${time} · ${rows.length}시간 예보 · 선택 모델 ${selectedResults.map(x => x.name).join(", ")}`;
+  }
+
+  async function refresh() {
+    statusEl.className = "status";
+    statusEl.textContent = "불러오는 중...";
+    document.getElementById("refresh").disabled = true;
+
+    const currentScroll = scrollBox.scrollLeft;
+    const settled = await Promise.allSettled(SOURCES.map(fetchSource));
+
+    fetched = {};
+    availableIds = new Set();
+
+    const fail = [];
+
+    for (let i = 0; i < settled.length; i++) {
+      const source = SOURCES[i];
+      const result = settled[i];
+      if (result.status === "fulfilled") {
+        fetched[source.id] = result.value;
+        availableIds.add(source.id);
+      } else {
+        fail.push(source.name);
+      }
+    }
+
+    if (!availableIds.size) {
+      avgNowEl.textContent = "--";
+      maxNowEl.textContent = "--";
+      statusEl.className = "status warning";
+      statusEl.textContent = "풍속 데이터를 불러오지 못했습니다.";
+      document.getElementById("refresh").disabled = false;
+      updateControlsAvailability();
+      return;
+    }
+
+    if (![...selectedIds].some(id => availableIds.has(id))) {
+      selectedIds = new Set([...availableIds]);
+    }
+
+    updateControlsAvailability();
+    renderFromSelection();
+    scrollBox.scrollLeft = currentScroll;
+
+    if (fail.length) {
+      statusEl.textContent += ` · 불러오기 실패: ${fail.join(", ")}`;
+    }
+
+    document.getElementById("refresh").disabled = false;
+  }
+
+  document.getElementById("refresh").addEventListener("click", refresh);
+  window.addEventListener("resize", () => {
+    if (lastRows) draw(lastRows);
+    else {
+      drawAxis(lastYMax);
+    }
+  });
+
+  refresh();
+  setInterval(refresh, 10 * 60 * 1000);
+})();
+</script>
+</body>
+</html>
