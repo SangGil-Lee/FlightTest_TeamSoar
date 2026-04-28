@@ -561,18 +561,28 @@
       ctx.stroke();
     }
 
-    // x labels
+    // hourly vertical guide lines
+    ctx.strokeStyle = "rgba(255,255,255,.045)";
+    ctx.lineWidth = 1;
+    rows.forEach((r, i) => {
+      const xx = x(i);
+      ctx.beginPath();
+      ctx.moveTo(xx, plot.top);
+      ctx.lineTo(xx, plot.top + plot.height);
+      ctx.stroke();
+    });
+
+    // x labels: every hour
     ctx.fillStyle = getCss("--muted");
+    ctx.font = "11px system-ui, -apple-system, Segoe UI, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     rows.forEach((r, i) => {
-      const isDateStart = i === 0 || r.date !== rows[i - 1]?.date;
-      const show = isDateStart || r.hour === 6 || r.hour === 12 || r.hour === 18 || i === rows.length - 1;
-      if (!show) return;
-
       const label = `${String(r.hour).padStart(2, "0")}시`;
       ctx.fillText(label, x(i), H - plot.bottom + 14);
     });
+
+    ctx.font = "12px system-ui, -apple-system, Segoe UI, sans-serif";
 
     drawLine(rows, r => r.avg, getCss("--avg"), x, y);
     drawLine(rows, r => r.max, getCss("--max"), x, y);
