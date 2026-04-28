@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>충남대 풍속 예보</title>
+  <title>풍속 예보 (유성구)</title>
   <style>
     :root {
       --bg: #0b1020;
@@ -44,6 +44,14 @@
       letter-spacing: -0.03em;
       font-weight: 750;
     }
+    .team-sub {
+      color: var(--text);
+      opacity: .82;
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: .02em;
+      margin-top: 4px;
+    }
     .sub {
       color: var(--muted);
       font-size: 13px;
@@ -66,7 +74,7 @@
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
     }
     .model-chip {
       display: inline-flex;
@@ -127,6 +135,7 @@
       border-radius: 18px;
       padding: 14px;
       box-shadow: 0 18px 40px rgba(0,0,0,.22);
+      position: relative;
     }
     .chart-row {
       display: flex;
@@ -151,6 +160,32 @@
       scrollbar-color: rgba(255,255,255,.28) rgba(255,255,255,.06);
       -webkit-overflow-scrolling: touch;
       touch-action: pan-x;
+      position: relative;
+    }
+    .floating-x-dates {
+      position: absolute;
+      left: var(--axisw);
+      right: 14px;
+      bottom: 58px;
+      height: 26px;
+      pointer-events: none;
+      z-index: 5;
+      overflow: hidden;
+    }
+    .floating-date {
+      position: absolute;
+      top: 0;
+      transform: translateX(-50%);
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: rgba(18,26,48,.94);
+      border: 1px solid rgba(255,255,255,.25);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 16px;
+      box-shadow: 0 5px 14px rgba(0,0,0,.28);
+      white-space: nowrap;
     }
     canvas {
       display: block;
@@ -197,6 +232,7 @@
       .controls { gap: 6px; }
       .model-chip { font-size: 12px; padding: 7px 9px; }
       .chart-wrap { padding: 10px; }
+      .floating-x-dates { right: 10px; bottom: 54px; }
     }
   </style>
 </head>
@@ -204,24 +240,14 @@
   <main>
     <div class="top">
       <div>
-        <h1 id="title">충남대 풍속 예보</h1>
+        <h1 id="title">풍속 예보 (유성구)</h1>
+        <div class="team-sub">For KAIST Team Soar Flight Tests</div>
         <div class="sub">10 m 기준 · 선택한 예보모델 집계 · m/s · 오른쪽 스크롤 가능</div>
       </div>
       <button id="refresh">새로고침</button>
     </div>
 
     <div id="controls" class="controls" aria-label="예보 모델 선택"></div>
-
-    <section class="cards" aria-label="현재 풍속 요약">
-      <div class="card">
-        <div class="label">평균풍속</div>
-        <div class="value"><span id="avgNow">--</span><span class="unit">m/s</span></div>
-      </div>
-      <div class="card">
-        <div class="label">최대풍속</div>
-        <div class="value"><span id="maxNow">--</span><span class="unit">m/s</span></div>
-      </div>
-    </section>
 
     <section class="chart-wrap">
       <div class="chart-row">
@@ -232,6 +258,7 @@
           <canvas id="chart" aria-label="평균풍속과 최대풍속 그래프"></canvas>
         </div>
       </div>
+      <div id="floatingDates" class="floating-x-dates" aria-hidden="true"></div>
       <div class="legend">
         <span><i class="dot avg"></i>평균풍속</span>
         <span><i class="dot max"></i>최대풍속</span>
@@ -256,7 +283,7 @@
   const HOURS_TO_SHOW = DAYS * 24;
   const STORAGE_KEY = `cnu-wind-selected-models-v2`;
 
-  document.getElementById("title").textContent = `${POINT.name} 풍속 예보`;
+  document.getElementById("title").textContent = "풍속 예보 (유성구)";
 
   const SOURCES = [
     // Best Match는 평균이 아니라 Open-Meteo가 위치별로 적절한 고해상도 모델을 선택/조합한 기본 예보입니다.
@@ -272,6 +299,7 @@
   const ctx = dataCanvas.getContext("2d");
   const axisCtx = axisCanvas.getContext("2d");
   const scrollBox = document.getElementById("scrollBox");
+  const floatingDatesEl = document.getElementById("floatingDates");
   const statusEl = document.getElementById("status");
   const avgNowEl = document.getElementById("avgNow");
   const maxNowEl = document.getElementById("maxNow");
@@ -457,9 +485,7 @@
     fitDataCanvas(rows);
     fitAxisCanvas();
 
-    const vals = rows.flatMap(r => [r.avg, r.max]).filter(Number.isFinite);
-    const maxVal = Math.max(2, ...vals);
-    const yMax = Math.ceil(maxVal * 1.18 * 2) / 2;
+    const yMax = 10;
     lastYMax = yMax;
 
     drawAxis(yMax);
@@ -471,7 +497,7 @@
     const W = rect.width;
     const H = rect.height;
     const plot = getPlot();
-    const y = v => plot.top + plot.height - (v / yMax) * plot.height;
+    const y = v => plot.top + plot.height - (Math.min(Math.max(v, 0), yMax) / yMax) * plot.height;
 
     axisCtx.clearRect(0, 0, W, H);
 
@@ -484,7 +510,7 @@
     axisCtx.fillStyle = getCss("--muted");
     axisCtx.lineWidth = 1;
 
-    const ticks = 5;
+    const ticks = 10;
     axisCtx.textAlign = "right";
     axisCtx.textBaseline = "middle";
     for (let i = 0; i <= ticks; i++) {
@@ -494,7 +520,7 @@
       axisCtx.moveTo(W - 8, yy);
       axisCtx.lineTo(W, yy);
       axisCtx.stroke();
-      axisCtx.fillText(v.toFixed(1), W - 12, yy);
+      axisCtx.fillText(v.toFixed(0), W - 12, yy);
     }
 
     axisCtx.save();
@@ -515,7 +541,7 @@
     const padR = 28;
     const plotW = W - padR;
     const x = i => rows.length <= 1 ? 8 : 8 + ((plotW - 16) * i / (rows.length - 1));
-    const y = v => plot.top + plot.height - (v / yMax) * plot.height;
+    const y = v => plot.top + plot.height - (Math.min(Math.max(v, 0), yMax) / yMax) * plot.height;
 
     ctx.clearRect(0, 0, W, H);
     drawDayBands(rows, x, plot, W, H);
@@ -525,7 +551,7 @@
 
     // horizontal grid
     ctx.strokeStyle = getCss("--grid");
-    const ticks = 5;
+    const ticks = 10;
     for (let i = 0; i <= ticks; i++) {
       const v = yMax * i / ticks;
       const yy = y(v);
@@ -544,7 +570,7 @@
       const show = isDateStart || r.hour === 6 || r.hour === 12 || r.hour === 18 || i === rows.length - 1;
       if (!show) return;
 
-      const label = isDateStart ? `${r.dateText} ${String(r.hour).padStart(2, "0")}시` : `${String(r.hour).padStart(2, "0")}시`;
+      const label = `${String(r.hour).padStart(2, "0")}시`;
       ctx.fillText(label, x(i), H - plot.bottom + 14);
     });
 
@@ -563,48 +589,42 @@
     }
   }
 
-  function drawDayBands(rows, x, plot, W, H) {
-    if (!rows.length) return;
+  function getDateGroups(rows, x, W) {
+    if (!rows.length) return [];
 
     const groups = [];
     let start = 0;
 
     for (let i = 1; i <= rows.length; i++) {
       if (i === rows.length || rows[i].date !== rows[start].date) {
-        groups.push({ start, end: i - 1, dateText: rows[start].dateText });
+        groups.push({
+          start,
+          end: i - 1,
+          dateText: rows[start].dateText,
+          left: start === 0 ? 0 : midpoint(x(start - 1), x(start)),
+          right: i - 1 === rows.length - 1 ? W : midpoint(x(i - 1), x(i))
+        });
         start = i;
       }
     }
 
-    groups.forEach((g, gi) => {
-      const left = g.start === 0 ? 0 : midpoint(x(g.start - 1), x(g.start));
-      const right = g.end === rows.length - 1 ? W : midpoint(x(g.end), x(g.end + 1));
+    return groups;
+  }
 
+  function drawDayBands(rows, x, plot, W, H) {
+    const groups = getDateGroups(rows, x, W);
+    if (!groups.length) return;
+
+    groups.forEach((g, gi) => {
       if (gi % 2 === 1) {
         ctx.fillStyle = getCss("--day");
-        ctx.fillRect(left, plot.top, right - left, plot.height);
+        ctx.fillRect(g.left, plot.top, g.right - g.left, plot.height);
       }
-
-      const center = (left + right) / 2;
-      const pillW = Math.max(78, Math.min(116, right - left - 10));
-      const pillH = 24;
-      const pillX = center - pillW / 2;
-      const pillY = 14;
-
-      ctx.fillStyle = getCss("--pill");
-      roundRect(ctx, pillX, pillY, pillW, pillH, 11);
-      ctx.fill();
-
-      ctx.fillStyle = getCss("--text");
-      ctx.font = "700 12px system-ui, -apple-system, Segoe UI, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(g.dateText, center, pillY + pillH / 2);
     });
 
     groups.forEach((g, gi) => {
       if (gi === 0) return;
-      const xx = midpoint(x(g.start - 1), x(g.start));
+      const xx = g.left;
       ctx.strokeStyle = getCss("--midnight");
       ctx.lineWidth = 3;
       ctx.setLineDash([]);
@@ -622,6 +642,41 @@
       ctx.stroke();
       ctx.setLineDash([]);
     });
+
+    updateFloatingDates(rows, x, W);
+  }
+
+  function updateFloatingDates(rows, x, W) {
+    if (!floatingDatesEl || !rows.length) return;
+
+    const groups = getDateGroups(rows, x, W);
+    const viewLeft = scrollBox.scrollLeft;
+    const viewRight = viewLeft + scrollBox.clientWidth;
+    const minPad = 44;
+    const maxPad = 44;
+
+    floatingDatesEl.innerHTML = "";
+
+    groups.forEach(g => {
+      const visibleLeft = Math.max(g.left, viewLeft);
+      const visibleRight = Math.min(g.right, viewRight);
+
+      if (visibleRight <= visibleLeft) return;
+
+      const labelXInCanvas = clamp((visibleLeft + visibleRight) / 2, g.left + minPad, g.right - maxPad);
+      const labelXInView = labelXInCanvas - viewLeft;
+
+      const el = document.createElement("div");
+      el.className = "floating-date";
+      el.textContent = g.dateText;
+      el.style.left = `${labelXInView}px`;
+      floatingDatesEl.appendChild(el);
+    });
+  }
+
+  function clamp(v, lo, hi) {
+    if (lo > hi) return (lo + hi) / 2;
+    return Math.min(Math.max(v, lo), hi);
   }
 
   function midpoint(a, b) {
@@ -694,8 +749,8 @@
       .map(id => fetched[id]);
 
     if (!selectedResults.length) {
-      avgNowEl.textContent = "--";
-      maxNowEl.textContent = "--";
+      if (avgNowEl) avgNowEl.textContent = "--";
+      if (maxNowEl) maxNowEl.textContent = "--";
       statusEl.className = "status warning";
       statusEl.textContent = "최소 1개 이상의 예보모델을 선택해야 합니다.";
       lastRows = [];
@@ -707,8 +762,8 @@
     lastRows = rows;
 
     const first = rows[0] || {};
-    avgNowEl.textContent = fmt(first.avg);
-    maxNowEl.textContent = fmt(first.max);
+    if (avgNowEl) avgNowEl.textContent = fmt(first.avg);
+    if (maxNowEl) maxNowEl.textContent = fmt(first.max);
     draw(rows);
 
     const now = new Date();
@@ -742,8 +797,8 @@
     }
 
     if (!availableIds.size) {
-      avgNowEl.textContent = "--";
-      maxNowEl.textContent = "--";
+      if (avgNowEl) avgNowEl.textContent = "--";
+      if (maxNowEl) maxNowEl.textContent = "--";
       statusEl.className = "status warning";
       statusEl.textContent = "풍속 데이터를 불러오지 못했습니다.";
       document.getElementById("refresh").disabled = false;
@@ -767,6 +822,9 @@
   }
 
   document.getElementById("refresh").addEventListener("click", refresh);
+  scrollBox.addEventListener("scroll", () => {
+    if (lastRows) draw(lastRows);
+  }, { passive: true });
   window.addEventListener("resize", () => {
     if (lastRows) draw(lastRows);
     else {
