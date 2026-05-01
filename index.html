@@ -275,6 +275,11 @@
     #dailyReport td.avg-col { color: var(--avg); }
     #dailyReport td.max-col { color: var(--max); }
     #dailyReport td.time-col { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    #dailyReport .rain-note {
+      color: #fbbf24;
+      font-weight: 700;
+      margin-left: 4px;
+    }
     #dailyReport th.time-head { white-space: nowrap; }
     #dailyReport th .head-break { display: block; }
 
@@ -879,22 +884,23 @@
     const nowDate = keyOfLocalHour(roundHourKST()).slice(0, 10);
     const rows_html = dates.map(date => {
       const { dateText, rows: dr } = byDate[date];
-      const dryRows = dr.filter(r => !r.isRain);
-      const validAvg = dryRows.filter(r => Number.isFinite(r.avg));
-      const validMax = dryRows.filter(r => Number.isFinite(r.max));
+      const validAvg = dr.filter(r => Number.isFinite(r.avg));
+      const validMax = dr.filter(r => Number.isFinite(r.max));
       if (!validAvg.length) return "";
 
       const minAvgRow = validAvg.reduce((a, b) => a.avg < b.avg ? a : b);
       const minMaxRow = validMax.length ? validMax.reduce((a, b) => a.max < b.max ? a : b) : null;
       const isPast = date < nowDate;
       const isToday = date === nowDate;
+      const avgRain = minAvgRow.isRain ? '<span class="rain-note">비</span>' : '';
+      const maxRain = minMaxRow?.isRain ? '<span class="rain-note">비</span>' : '';
 
       return `<tr${isToday ? ' class="today-row"' : ''}${isPast ? ' style="opacity:.5"' : ''}>
         <td class="date-col">${dateText}</td>
         <td class="avg-col">${minAvgRow.avg.toFixed(1)}</td>
-        <td class="time-col">${String(minAvgRow.hour).padStart(2,"0")}시</td>
+        <td class="time-col">${String(minAvgRow.hour).padStart(2,"0")}시${avgRain}</td>
         <td class="max-col">${minMaxRow ? minMaxRow.max.toFixed(1) : "--"}</td>
-        <td class="time-col">${minMaxRow ? String(minMaxRow.hour).padStart(2,"0") + "시" : "--"}</td>
+        <td class="time-col">${minMaxRow ? String(minMaxRow.hour).padStart(2,"0") + "시" + maxRain : "--"}</td>
       </tr>`;
     }).join("");
 
