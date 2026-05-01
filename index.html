@@ -274,16 +274,16 @@
       color: #fbbf24;
     }
     #dailyReport td.date-col { color: var(--text); font-weight: 700; text-align: left; }
-    #dailyReport td.avg-col { color: var(--avg); }
-    #dailyReport td.max-col { color: var(--max); }
-    #dailyReport td.time-col { color: var(--muted); font-size: 12px; white-space: nowrap; }
-    #dailyReport .rain-note {
-      color: #fbbf24;
+    #dailyReport td.range-col {
+      color: var(--text);
       font-weight: 700;
-      margin-left: 4px;
+      text-align: left;
+      line-height: 1.5;
     }
-    #dailyReport th.time-head { white-space: nowrap; }
-    #dailyReport th .head-break { display: block; }
+    #dailyReport .empty-range {
+      color: var(--muted);
+      font-weight: 650;
+    }
 
     @media (max-width: 640px) {
       :root { --axisw: 56px; }
@@ -903,7 +903,7 @@
 
     const byDate = {};
     for (const r of rows) {
-      if (r.hour < 8 || r.hour > 18) continue;
+      if (r.hour < 8 || r.hour >= 18) continue;
       if (!byDate[r.date]) byDate[r.date] = { dateText: r.dateText, rows: [] };
       byDate[r.date].rows.push(r);
     }
@@ -914,44 +914,69 @@
     const nowDate = keyOfLocalHour(roundHourKST()).slice(0, 10);
     const rows_html = dates.map(date => {
       const { dateText, rows: dr } = byDate[date];
-      const validAvg = dr.filter(r => Number.isFinite(r.avg));
-      const validMax = dr.filter(r => Number.isFinite(r.max));
-      if (!validAvg.length) return "";
-
-      const minAvgRow = validAvg.reduce((a, b) => a.avg < b.avg ? a : b);
-      const minMaxRow = validMax.length ? validMax.reduce((a, b) => a.max < b.max ? a : b) : null;
       const isPast = date < nowDate;
       const isToday = date === nowDate;
-      const avgRain = minAvgRow.isRain ? '<span class="rain-note">비</span>' : '';
-      const maxRain = minMaxRow?.isRain ? '<span class="rain-note">비</span>' : '';
+      const ranges = getSafeGustRanges(dr);
+      const rangeText = ranges.length
+        ? ranges.map(({ startHour, endHour }) => `${formatHour(startHour)}~${formatHour(endHour)}`).join(", ")
+        : '<span class="empty-range">--</span>';
 
       return `<tr${isToday ? ' class="today-row"' : ''}${isPast ? ' style="opacity:.5"' : ''}>
         <td class="date-col">${dateText}</td>
-        <td class="avg-col">${minAvgRow.avg.toFixed(1)}</td>
-        <td class="time-col">${String(minAvgRow.hour).padStart(2,"0")}시${avgRain}</td>
-        <td class="max-col">${minMaxRow ? minMaxRow.max.toFixed(1) : "--"}</td>
-        <td class="time-col">${minMaxRow ? String(minMaxRow.hour).padStart(2,"0") + "시" + maxRain : "--"}</td>
+        <td class="range-col">${rangeText}</td>
       </tr>`;
     }).join("");
 
     el.innerHTML = `<div style="color:var(--text);font-size:15px;font-weight:750;margin-bottom:8px;">
-      비행 권장시간 <span style="color:var(--muted);font-size:12px;font-weight:500;">(08시 ~ 18시 기준)</span>
+      비행 가능 시간대 <span style="color:var(--muted);font-size:12px;font-weight:500;">(08시 ~ 18시, 돌풍 5m/s 이하, 비 제외)</span>
     </div>
     <table>
       <colgroup>
-        <col style="width:20%">
-        <col style="width:20%">
-        <col style="width:18%">
-        <col style="width:24%">
-        <col style="width:18%">
+        <col style="width:26%">
+        <col style="width:74%">
       </colgroup>
       <thead><tr>
         <th style="text-align:left">날짜</th>
-        <th><span class="head-break">최저</span>평균풍속</th><th class="time-head">시각</th>
-        <th><span class="head-break">최저</span>최대풍속</th><th class="time-head">시각</th>
+        <th style="text-align:left">가능 시간대</th>
       </tr></thead>
       <tbody>${rows_html}</tbody>
     </table>`;
+  }
+
+  function getSafeGustRanges(rows) {
+    const sorted = rows
+      .filter(r => Number.isFinite(r.max))
+      .sort((a, b) => a.hour - b.hour);
+    const ranges = [];
+    let startHour = null;
+    let endHour = null;
+
+    for (const r of sorted) {
+      const isSafe = !r.isRain && r.max <= 5;
+      if (isSafe) {
+        if (startHour !== null && r.hour !== endHour) {
+          ranges.push({ startHour, endHour });
+          startHour = null;
+          endHour = null;
+        }
+        if (startHour === null) startHour = r.hour;
+        endHour = r.hour + 1;
+        continue;
+      }
+
+      if (startHour !== null) {
+        ranges.push({ startHour, endHour });
+        startHour = null;
+        endHour = null;
+      }
+    }
+
+    if (startHour !== null) ranges.push({ startHour, endHour });
+    return ranges;
+  }
+
+  function formatHour(hour) {
+    return `${String(hour).padStart(2, "0")}시`;
   }
 
   function updateCalmLabel() {
