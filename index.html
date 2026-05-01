@@ -222,6 +222,49 @@
     }
     .status.warning { color: var(--warn); }
 
+    .calm-label {
+      position: absolute;
+      left: calc(var(--axisw) + 16px);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      color: rgba(125,211,252,.55);
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    #dailyReport {
+      margin-top: 12px;
+    }
+    #dailyReport table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      background: rgba(18,26,48,.82);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 18px 40px rgba(0,0,0,.22);
+    }
+    #dailyReport th {
+      padding: 10px 14px;
+      color: var(--muted);
+      font-weight: 650;
+      text-align: center;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,.03);
+    }
+    #dailyReport td {
+      padding: 9px 14px;
+      text-align: center;
+      border-bottom: 1px solid rgba(255,255,255,.05);
+    }
+    #dailyReport tr:last-child td { border-bottom: none; }
+    #dailyReport td.date-col { color: var(--text); font-weight: 700; text-align: left; }
+    #dailyReport td.avg-col { color: var(--avg); }
+    #dailyReport td.max-col { color: var(--max); }
+    #dailyReport td.time-col { color: var(--muted); font-size: 12px; }
+
     @media (max-width: 640px) {
       :root { --axisw: 56px; }
       main { width: min(100vw - 18px, 1180px); margin-top: 14px; }
@@ -250,6 +293,7 @@
     <div id="controls" class="controls" aria-label="예보 모델 선택"></div>
 
     <section class="chart-wrap">
+      <div id="calmLabel" class="calm-label">CALM</div>
       <div class="chart-row">
         <div class="axis-box">
           <canvas id="axis" aria-hidden="true"></canvas>
@@ -265,6 +309,7 @@
       </div>
     </section>
     <div id="status" class="status"></div>
+    <div id="dailyReport"></div>
   </main>
 
 <script>
@@ -288,7 +333,6 @@
   const SOURCES = [
     // Best Match는 평균이 아니라 Open-Meteo가 위치별로 적절한 고해상도 모델을 선택/조합한 기본 예보입니다.
     { id: "best", name: "Best Match", url: "https://api.open-meteo.com/v1/forecast" },
-    { id: "kma",  name: "KMA",        url: "https://api.open-meteo.com/v1/kma" },
     { id: "gfs",  name: "GFS",        url: "https://api.open-meteo.com/v1/gfs" },
     { id: "icon", name: "ICON",       url: "https://api.open-meteo.com/v1/dwd-icon" },
     { id: "ecmwf",name: "ECMWF",      url: "https://api.open-meteo.com/v1/ecmwf" }
@@ -310,6 +354,7 @@
   let selectedIds = loadSelectedIds();
   let lastRows = null;
   let lastYMax = 2;
+  let firstLoad = true;
 
   initControls();
 
@@ -319,7 +364,7 @@
       const ids = raw ? JSON.parse(raw) : null;
       if (Array.isArray(ids) && ids.length) return new Set(ids);
     } catch {}
-    return new Set(SOURCES.map(s => s.id));
+    return new Set(["best"]);
   }
 
   function saveSelectedIds() {
@@ -362,7 +407,8 @@
       hourly: "wind_speed_10m,wind_gusts_10m",
       wind_speed_unit: "ms",
       timezone: "Asia/Seoul",
-      forecast_days: String(DAYS)
+      forecast_days: String(DAYS),
+      past_days: "1"
     });
     return `${source.url}?${q.toString()}`;
   }
@@ -406,11 +452,17 @@
 
   function aggregate(results) {
     const nowHour = roundHourKST();
-    const hours = Array.from({ length: HOURS_TO_SHOW }, (_, i) => {
-      const d = new Date(nowHour);
+    const PAST_HOURS = 24;
+    const startHour = new Date(nowHour);
+    startHour.setHours(startHour.getHours() - PAST_HOURS);
+
+    const hours = Array.from({ length: HOURS_TO_SHOW + PAST_HOURS }, (_, i) => {
+      const d = new Date(startHour);
       d.setHours(d.getHours() + i);
       return keyOfLocalHour(d);
     });
+
+    const nowKey = keyOfLocalHour(nowHour);
 
     const rows = hours.map(time => {
       const speeds = [];
@@ -433,6 +485,7 @@
         date: time.slice(0, 10),
         dateText: dateLabel(time),
         hour: Number(time.slice(11, 13)),
+        isCurrent: time === nowKey,
         avg: speeds.length ? mean(speeds) : null,
         max: gusts.length ? Math.max(...gusts) : null,
         n: Math.max(speeds.length, gusts.length),
@@ -463,7 +516,7 @@
   function fitDataCanvas(rows) {
     const ratio = window.devicePixelRatio || 1;
     const visibleWidth = scrollBox.clientWidth || 800;
-    const hourWidth = window.innerWidth < 640 ? 46 : 54;
+    const hourWidth = window.innerWidth < 640 ? 16 : 18;
     const cssWidth = Math.max(visibleWidth, rows.length * hourWidth + 34);
     dataCanvas.style.width = cssWidth + "px";
 
@@ -531,6 +584,10 @@
     axisCtx.rotate(-Math.PI / 2);
     axisCtx.fillText("풍속 (m/s)", 0, 0);
     axisCtx.restore();
+
+    // expose calmY for HTML label
+    axisCanvas._calmY = y(5);
+    updateCalmLabel();
   }
 
   function drawData(rows, yMax) {
@@ -544,6 +601,12 @@
     const y = v => plot.top + plot.height - (Math.min(Math.max(v, 0), yMax) / yMax) * plot.height;
 
     ctx.clearRect(0, 0, W, H);
+
+    // calm zone background (0 ~ 5 m/s) — inside plot only
+    const calmY = y(5);
+    ctx.fillStyle = "rgba(125,211,252,.06)";
+    ctx.fillRect(0, calmY, W - padR, plot.height - (calmY - plot.top));
+
     drawDayBands(rows, x, plot, W, H);
 
     ctx.font = "12px system-ui, -apple-system, Segoe UI, sans-serif";
@@ -561,42 +624,72 @@
       ctx.stroke();
     }
 
-    // hourly vertical guide lines
-    ctx.strokeStyle = "rgba(255,255,255,.045)";
+    // vertical guide lines: strong at labeled ticks, faint otherwise
     ctx.lineWidth = 1;
     rows.forEach((r, i) => {
       const xx = x(i);
+      const isLabeled = r.hour % 3 === 0;
+      ctx.strokeStyle = isLabeled ? "rgba(255,255,255,.10)" : "rgba(255,255,255,.025)";
       ctx.beginPath();
       ctx.moveTo(xx, plot.top);
       ctx.lineTo(xx, plot.top + plot.height);
       ctx.stroke();
+
+      if (isLabeled) {
+        ctx.strokeStyle = getCss("--muted");
+        ctx.beginPath();
+        ctx.moveTo(xx, plot.top + plot.height);
+        ctx.lineTo(xx, plot.top + plot.height + 5);
+        ctx.stroke();
+      }
     });
 
-    // x labels: every hour
-    ctx.fillStyle = getCss("--muted");
+    // x labels: every 3 hours
     ctx.font = "11px system-ui, -apple-system, Segoe UI, sans-serif";
-    ctx.textAlign = "center";
     ctx.textBaseline = "top";
     rows.forEach((r, i) => {
-      const label = `${String(r.hour).padStart(2, "0")}시`;
-      ctx.fillText(label, x(i), H - plot.bottom + 14);
+      if (r.hour % 3 !== 0) return;
+      ctx.fillStyle = getCss("--muted");
+      ctx.textAlign = "center";
+      ctx.fillText(`${String(r.hour).padStart(2, "0")}시`, x(i), H - plot.bottom + 14);
     });
+
+    // (현재) vertical dashed line + tag
+    {
+      const currentIdx = rows.findIndex(r => r.isCurrent);
+      const tagX = currentIdx >= 0 ? x(currentIdx) : x(0);
+
+      ctx.save();
+      ctx.strokeStyle = getCss("--avg");
+      ctx.globalAlpha = 0.55;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(tagX, plot.top);
+      ctx.lineTo(tagX, plot.top + plot.height);
+      ctx.stroke();
+      ctx.restore();
+      const tagY = H - plot.bottom + 28;
+      const tagW = 42, tagH = 16, tagR = 8;
+      const tagLeft = Math.max(2, tagX - tagW / 2);
+      roundRect(ctx, tagLeft, tagY, tagW, tagH, tagR);
+      ctx.fillStyle = "rgba(18,26,48,.94)";
+      ctx.fill();
+      ctx.strokeStyle = getCss("--avg");
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = getCss("--text");
+      ctx.font = "10px system-ui, -apple-system, Segoe UI, sans-serif";
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "center";
+      ctx.fillText("(현재)", tagLeft + tagW / 2, tagY + tagH / 2);
+    }
 
     ctx.font = "12px system-ui, -apple-system, Segoe UI, sans-serif";
 
-    drawLine(rows, r => r.avg, getCss("--avg"), x, y);
-    drawLine(rows, r => r.max, getCss("--max"), x, y);
+    drawLine(rows, r => r.avg, getCss("--avg"), x, y, yMax);
+    drawLine(rows, r => r.max, getCss("--max"), x, y, yMax);
 
-    const first = rows[0];
-    if (first) {
-      ctx.font = "12px system-ui, -apple-system, Segoe UI, sans-serif";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "bottom";
-      ctx.fillStyle = getCss("--avg");
-      ctx.fillText(`현재 평균 ${fmt(first.avg)}`, x(0) + 8, Math.max(18, y(first.avg) - 8));
-      ctx.fillStyle = getCss("--max");
-      ctx.fillText(`현재 최대 ${fmt(first.max)}`, x(0) + 8, Math.max(34, y(first.max) - 8));
-    }
   }
 
   function getDateGroups(rows, x, W) {
@@ -611,8 +704,8 @@
           start,
           end: i - 1,
           dateText: rows[start].dateText,
-          left: start === 0 ? 0 : midpoint(x(start - 1), x(start)),
-          right: i - 1 === rows.length - 1 ? W : midpoint(x(i - 1), x(i))
+          left: start === 0 ? 0 : x(start),
+          right: i === rows.length ? W : x(i)
         });
         start = i;
       }
@@ -625,16 +718,27 @@
     const groups = getDateGroups(rows, x, W);
     if (!groups.length) return;
 
+    ctx.font = "11px system-ui, -apple-system, Segoe UI, sans-serif";
+    ctx.textBaseline = "top";
+
     groups.forEach((g, gi) => {
       if (gi === 0) return;
       const xx = g.left;
+
       ctx.strokeStyle = getCss("--midnight");
-      ctx.lineWidth = 2;
-      ctx.setLineDash([]);
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 5]);
       ctx.beginPath();
       ctx.moveTo(xx, plot.top - 8);
       ctx.lineTo(xx, plot.top + plot.height + 12);
       ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = getCss("--muted");
+      ctx.textAlign = "right";
+      ctx.fillText(groups[gi - 1].dateText, xx - 6, plot.top + 4);
+      ctx.textAlign = "left";
+      ctx.fillText(g.dateText, xx + 6, plot.top + 4);
     });
 
     updateFloatingDates(rows, x, W);
@@ -691,7 +795,7 @@
     ctx.quadraticCurveTo(x, y, x + rr, y);
   }
 
-  function drawLine(rows, getter, color, x, y) {
+  function drawLine(rows, getter, color, x, y, yMax) {
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
     ctx.lineWidth = 2.5;
@@ -710,8 +814,70 @@
       if (!Number.isFinite(v)) return;
       ctx.beginPath();
       ctx.arc(x(i), y(v), 3.0, 0, Math.PI * 2);
-      ctx.fill();
+      if (v > yMax) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      } else {
+        ctx.fill();
+      }
     });
+  }
+
+  function renderDailyReport(rows) {
+    const el = document.getElementById("dailyReport");
+    if (!el) return;
+
+    const byDate = {};
+    for (const r of rows) {
+      if (r.hour < 8 || r.hour > 18) continue;
+      if (!byDate[r.date]) byDate[r.date] = { dateText: r.dateText, rows: [] };
+      byDate[r.date].rows.push(r);
+    }
+
+    const dates = Object.keys(byDate).sort();
+    if (!dates.length) { el.innerHTML = ""; return; }
+
+    const nowDate = keyOfLocalHour(roundHourKST()).slice(0, 10);
+    const rows_html = dates.map(date => {
+      const { dateText, rows: dr } = byDate[date];
+      const validAvg = dr.filter(r => Number.isFinite(r.avg));
+      const validMax = dr.filter(r => Number.isFinite(r.max));
+      if (!validAvg.length) return "";
+
+      const minAvgRow = validAvg.reduce((a, b) => a.avg < b.avg ? a : b);
+      const minMaxRow = validMax.length ? validMax.reduce((a, b) => a.max < b.max ? a : b) : null;
+      const isPast = date < nowDate;
+
+      return `<tr${isPast ? ' style="opacity:.5"' : ''}>
+        <td class="date-col">${dateText}</td>
+        <td class="avg-col">${minAvgRow.avg.toFixed(1)} m/s</td>
+        <td class="time-col">${String(minAvgRow.hour).padStart(2,"0")}시</td>
+        <td class="max-col">${minMaxRow ? minMaxRow.max.toFixed(1) + " m/s" : "--"}</td>
+        <td class="time-col">${minMaxRow ? String(minMaxRow.hour).padStart(2,"0") + "시" : "--"}</td>
+      </tr>`;
+    }).join("");
+
+    el.innerHTML = `<div style="color:var(--text);font-size:15px;font-weight:750;margin-bottom:8px;">
+      비행 권장시간 <span style="color:var(--muted);font-size:12px;font-weight:500;">(08시 ~ 18시 기준)</span>
+    </div>
+    <table>
+      <thead><tr>
+        <th style="text-align:left">날짜</th>
+        <th>최저 평균풍속</th><th>시각</th>
+        <th>최저 최대풍속</th><th>시각</th>
+      </tr></thead>
+      <tbody>${rows_html}</tbody>
+    </table>`;
+  }
+
+  function updateCalmLabel() {
+    const el = document.getElementById("calmLabel");
+    if (!el || !axisCanvas._calmY) return;
+    const axisRect = axisCanvas.closest(".axis-box").getBoundingClientRect();
+    const wrapRect = el.closest(".chart-wrap").getBoundingClientRect();
+    const offsetTop = axisRect.top - wrapRect.top;
+    el.style.top = (offsetTop + axisCanvas._calmY + 4) + "px";
   }
 
   function getCss(name) {
@@ -759,6 +925,7 @@
     if (avgNowEl) avgNowEl.textContent = fmt(first.avg);
     if (maxNowEl) maxNowEl.textContent = fmt(first.max);
     draw(rows);
+    renderDailyReport(rows);
 
     const now = new Date();
     const time = now.toLocaleString("ko-KR", { hour12: false });
@@ -806,7 +973,17 @@
 
     updateControlsAvailability();
     renderFromSelection();
-    scrollBox.scrollLeft = currentScroll;
+
+    if (firstLoad) {
+      firstLoad = false;
+      const hourWidth = window.innerWidth < 640 ? 16 : 18;
+      const currentIdx = lastRows ? lastRows.findIndex(r => r.isCurrent) : -1;
+      if (currentIdx > 0) {
+        scrollBox.scrollLeft = Math.max(0, currentIdx * hourWidth - 60);
+      }
+    } else {
+      scrollBox.scrollLeft = currentScroll;
+    }
 
     if (fail.length) {
       statusEl.textContent += ` · 불러오기 실패: ${fail.join(", ")}`;
