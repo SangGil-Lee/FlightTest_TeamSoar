@@ -13,6 +13,7 @@
       --grid: rgba(255,255,255,.10);
       --avg: #7dd3fc;
       --max: #fca5a5;
+      --rain: #60a5fa;
       --line: rgba(255,255,255,.18);
       --day: rgba(255,255,255,.035);
       --midnight: rgba(255,255,255,.52);
@@ -213,6 +214,7 @@
     }
     .avg { background: var(--avg); }
     .max { background: var(--max); }
+    .rain { background: var(--rain); opacity: .45; }
     .status {
       color: var(--muted);
       font-size: 12px;
@@ -324,6 +326,7 @@
       <div class="legend">
         <span><i class="dot avg"></i>평균풍속</span>
         <span><i class="dot max"></i>최대풍속</span>
+        <span><i class="dot rain"></i>강수량</span>
       </div>
     </section>
     <div id="status" class="status"></div>
@@ -632,6 +635,7 @@
     ctx.fillRect(0, calmY, W - padR, plot.height - (calmY - plot.top));
 
     drawDayBands(rows, x, plot, W, H);
+    drawPrecipBars(rows, x, plot, W, padR);
 
     ctx.font = "12px system-ui, -apple-system, Segoe UI, sans-serif";
     ctx.lineWidth = 1;
@@ -836,6 +840,32 @@
 
     drawCurrentTag(Math.max(4, plot.top - tagH - 8));
     drawCurrentTag(H - plot.bottom + 30);
+  }
+
+  function drawPrecipBars(rows, x, plot, W, padR) {
+    const rainyRows = rows.filter(r => Number.isFinite(r.precip) && r.precip > 0);
+    if (!rainyRows.length) return;
+
+    const maxPrecip = Math.max(1, ...rainyRows.map(r => r.precip));
+    const baseY = plot.top + plot.height;
+    const maxBarH = plot.height * 0.32;
+    const slotW = rows.length > 1 ? Math.abs(x(1) - x(0)) : 14;
+    const barW = Math.max(2, Math.min(10, slotW * 0.62));
+
+    ctx.save();
+    ctx.fillStyle = "rgba(96,165,250,.18)";
+    ctx.strokeStyle = "rgba(96,165,250,.26)";
+    ctx.lineWidth = 1;
+
+    rows.forEach((r, i) => {
+      if (!Number.isFinite(r.precip) || r.precip <= 0) return;
+      const barH = Math.max(2, Math.min(maxBarH, (r.precip / maxPrecip) * maxBarH));
+      const left = Math.max(0, Math.min(W - padR - barW, x(i) - barW / 2));
+      ctx.fillRect(left, baseY - barH, barW, barH);
+      ctx.strokeRect(left, baseY - barH, barW, barH);
+    });
+
+    ctx.restore();
   }
 
   function drawLine(rows, getter, color, x, y, yMax) {
