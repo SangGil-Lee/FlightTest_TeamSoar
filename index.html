@@ -99,6 +99,28 @@
       opacity: .42;
       cursor: not-allowed;
     }
+    .threshold-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(18,26,48,.72);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    .threshold-control input {
+      width: 58px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 8px;
+      background: rgba(255,255,255,.08);
+      color: var(--text);
+      padding: 5px 7px;
+      font: inherit;
+    }
 
     .cards {
       display: grid;
@@ -348,6 +370,8 @@
   const DAYS = Math.min(7, Math.max(1, Number(params.get("days")) || 7));
   const HOURS_TO_SHOW = DAYS * 24;
   const STORAGE_KEY = `cnu-wind-selected-models-v2`;
+  const GUST_THRESHOLD_KEY = `cnu-wind-gust-threshold-v1`;
+  const PRECIP_THRESHOLD_KEY = `cnu-wind-precip-threshold-v1`;
 
   document.getElementById("title").textContent = "풍속 예보 (유성구)";
 
@@ -373,6 +397,8 @@
   let fetched = {};
   let availableIds = new Set();
   let selectedIds = loadSelectedIds();
+  let gustThreshold = loadGustThreshold();
+  let precipThreshold = loadPrecipThreshold();
   let lastRows = null;
   let lastYMax = 2;
   let firstLoad = true;
@@ -391,6 +417,34 @@
   function saveSelectedIds() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify([...selectedIds]));
+    } catch {}
+  }
+
+  function loadGustThreshold() {
+    try {
+      const value = Number(localStorage.getItem(GUST_THRESHOLD_KEY));
+      if (Number.isFinite(value) && value > 0) return value;
+    } catch {}
+    return 5;
+  }
+
+  function saveGustThreshold() {
+    try {
+      localStorage.setItem(GUST_THRESHOLD_KEY, String(gustThreshold));
+    } catch {}
+  }
+
+  function loadPrecipThreshold() {
+    try {
+      const value = Number(localStorage.getItem(PRECIP_THRESHOLD_KEY));
+      if (Number.isFinite(value) && value >= 0) return value;
+    } catch {}
+    return 0;
+  }
+
+  function savePrecipThreshold() {
+    try {
+      localStorage.setItem(PRECIP_THRESHOLD_KEY, String(precipThreshold));
     } catch {}
   }
 
@@ -419,6 +473,58 @@
       label.appendChild(span);
       controlsEl.appendChild(label);
     }
+
+    const thresholdLabel = document.createElement("label");
+    thresholdLabel.className = "threshold-control";
+    thresholdLabel.textContent = "돌풍 기준";
+
+    const thresholdInput = document.createElement("input");
+    thresholdInput.id = "gustThreshold";
+    thresholdInput.type = "number";
+    thresholdInput.min = "0.5";
+    thresholdInput.max = "20";
+    thresholdInput.step = "0.5";
+    thresholdInput.value = String(gustThreshold);
+    thresholdInput.addEventListener("input", () => {
+      const next = Number(thresholdInput.value);
+      if (!Number.isFinite(next) || next <= 0) return;
+      gustThreshold = next;
+      saveGustThreshold();
+      if (lastRows) renderDailyReport(lastRows);
+    });
+
+    const unit = document.createElement("span");
+    unit.textContent = "m/s 이하";
+
+    thresholdLabel.appendChild(thresholdInput);
+    thresholdLabel.appendChild(unit);
+    controlsEl.appendChild(thresholdLabel);
+
+    const precipLabel = document.createElement("label");
+    precipLabel.className = "threshold-control";
+    precipLabel.textContent = "강수량 기준";
+
+    const precipInput = document.createElement("input");
+    precipInput.id = "precipThreshold";
+    precipInput.type = "number";
+    precipInput.min = "0";
+    precipInput.max = "50";
+    precipInput.step = "0.1";
+    precipInput.value = String(precipThreshold);
+    precipInput.addEventListener("input", () => {
+      const next = Number(precipInput.value);
+      if (!Number.isFinite(next) || next < 0) return;
+      precipThreshold = next;
+      savePrecipThreshold();
+      if (lastRows) renderDailyReport(lastRows);
+    });
+
+    const precipUnit = document.createElement("span");
+    precipUnit.textContent = "mm 이하";
+
+    precipLabel.appendChild(precipInput);
+    precipLabel.appendChild(precipUnit);
+    controlsEl.appendChild(precipLabel);
   }
 
   function qs(source) {
@@ -928,7 +1034,7 @@
     }).join("");
 
     el.innerHTML = `<div style="color:var(--text);font-size:15px;font-weight:750;margin-bottom:8px;">
-      비행 가능 시간대 <span style="color:var(--muted);font-size:12px;font-weight:500;">(08시 ~ 18시, 돌풍 5m/s 이하, 비 제외)</span>
+      비행 가능 시간대 <span style="color:var(--muted);font-size:12px;font-weight:500;">(08시 ~ 18시, 돌풍 ${gustThresholdText()} 이하, 강수량 ${precipThresholdText()} 이하)</span>
     </div>
     <table>
       <colgroup>
@@ -952,7 +1058,7 @@
     let endHour = null;
 
     for (const r of sorted) {
-      const isSafe = !r.isRain && r.max <= 5;
+      const isSafe = r.max <= gustThreshold && r.precip <= precipThreshold;
       if (isSafe) {
         if (startHour !== null && r.hour !== endHour) {
           ranges.push({ startHour, endHour });
@@ -977,6 +1083,14 @@
 
   function formatHour(hour) {
     return `${String(hour).padStart(2, "0")}시`;
+  }
+
+  function gustThresholdText() {
+    return `${Number.isInteger(gustThreshold) ? gustThreshold.toFixed(0) : gustThreshold.toFixed(1)}m/s`;
+  }
+
+  function precipThresholdText() {
+    return `${Number.isInteger(precipThreshold) ? precipThreshold.toFixed(0) : precipThreshold.toFixed(1)}mm`;
   }
 
   function updateCalmLabel() {
