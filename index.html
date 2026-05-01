@@ -361,7 +361,6 @@
         <span><i class="dot rain"></i>강수량</span>
       </div>
     </section>
-    <div id="thresholdControls" class="threshold-panel" aria-label="비행 조건 기준"></div>
     <div id="status" class="status"></div>
     <div id="dailyReport"></div>
   </main>
@@ -404,7 +403,6 @@
   const avgNowEl = document.getElementById("avgNow");
   const maxNowEl = document.getElementById("maxNow");
   const controlsEl = document.getElementById("controls");
-  const thresholdControlsEl = document.getElementById("thresholdControls");
 
   let fetched = {};
   let availableIds = new Set();
@@ -416,7 +414,6 @@
   let firstLoad = true;
 
   initControls();
-  initThresholdControls();
 
   function loadSelectedIds() {
     try {
@@ -489,6 +486,8 @@
   }
 
   function initThresholdControls() {
+    const thresholdControlsEl = document.getElementById("thresholdControls");
+    if (!thresholdControlsEl) return;
     thresholdControlsEl.innerHTML = "";
     thresholdControlsEl.appendChild(createThresholdSlider({
       label: "돌풍 기준",
@@ -1060,6 +1059,7 @@
     el.innerHTML = `<div style="color:var(--text);font-size:15px;font-weight:750;margin-bottom:8px;">
       비행 가능 시간대 <span style="color:var(--muted);font-size:12px;font-weight:500;">(08시 ~ 18시, 돌풍 ${gustThresholdText()} 이하, 강수량 ${precipThresholdText()} 이하)</span>
     </div>
+    <div id="thresholdControls" class="threshold-panel" aria-label="비행 조건 기준"></div>
     <table>
       <colgroup>
         <col style="width:26%">
@@ -1071,6 +1071,7 @@
       </tr></thead>
       <tbody>${rows_html}</tbody>
     </table>`;
+    initThresholdControls();
   }
 
   function getSafeGustRanges(rows) {
