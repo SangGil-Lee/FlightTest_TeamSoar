@@ -99,27 +99,35 @@
       opacity: .42;
       cursor: not-allowed;
     }
+    .threshold-panel {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 10px 0 4px;
+    }
     .threshold-control {
-      display: inline-flex;
+      display: grid;
+      grid-template-columns: auto minmax(120px, 1fr) auto;
       align-items: center;
       gap: 7px;
-      padding: 8px 10px;
+      padding: 10px 12px;
       border: 1px solid var(--line);
-      border-radius: 999px;
+      border-radius: 12px;
       background: rgba(18,26,48,.72);
       color: var(--text);
       font-size: 13px;
       font-weight: 650;
-      white-space: nowrap;
     }
     .threshold-control input {
-      width: 58px;
-      border: 1px solid rgba(255,255,255,.18);
-      border-radius: 8px;
-      background: rgba(255,255,255,.08);
-      color: var(--text);
-      padding: 5px 7px;
-      font: inherit;
+      width: 100%;
+      accent-color: var(--avg);
+      cursor: ew-resize;
+    }
+    .threshold-value {
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      min-width: 58px;
+      text-align: right;
     }
 
     .cards {
@@ -317,6 +325,8 @@
       .controls { gap: 6px; }
       .model-chip { font-size: 12px; padding: 7px 9px; }
       .chart-wrap { padding: 10px; }
+      .threshold-panel { grid-template-columns: 1fr; }
+      .threshold-control { grid-template-columns: auto minmax(90px, 1fr) auto; }
       .floating-x-dates { right: 10px; bottom: 36px; }
     }
   </style>
@@ -351,6 +361,7 @@
         <span><i class="dot rain"></i>강수량</span>
       </div>
     </section>
+    <div id="thresholdControls" class="threshold-panel" aria-label="비행 조건 기준"></div>
     <div id="status" class="status"></div>
     <div id="dailyReport"></div>
   </main>
@@ -393,6 +404,7 @@
   const avgNowEl = document.getElementById("avgNow");
   const maxNowEl = document.getElementById("maxNow");
   const controlsEl = document.getElementById("controls");
+  const thresholdControlsEl = document.getElementById("thresholdControls");
 
   let fetched = {};
   let availableIds = new Set();
@@ -404,6 +416,7 @@
   let firstLoad = true;
 
   initControls();
+  initThresholdControls();
 
   function loadSelectedIds() {
     try {
@@ -473,58 +486,69 @@
       label.appendChild(span);
       controlsEl.appendChild(label);
     }
+  }
 
-    const thresholdLabel = document.createElement("label");
-    thresholdLabel.className = "threshold-control";
-    thresholdLabel.textContent = "돌풍 기준";
+  function initThresholdControls() {
+    thresholdControlsEl.innerHTML = "";
+    thresholdControlsEl.appendChild(createThresholdSlider({
+      label: "돌풍 기준",
+      value: gustThreshold,
+      min: 0.5,
+      max: 20,
+      step: 0.5,
+      format: formatGustThreshold,
+      onInput: next => {
+        if (!Number.isFinite(next) || next <= 0) return;
+        gustThreshold = next;
+        saveGustThreshold();
+        if (lastRows) renderDailyReport(lastRows);
+      }
+    }));
 
-    const thresholdInput = document.createElement("input");
-    thresholdInput.id = "gustThreshold";
-    thresholdInput.type = "number";
-    thresholdInput.min = "0.5";
-    thresholdInput.max = "20";
-    thresholdInput.step = "0.5";
-    thresholdInput.value = String(gustThreshold);
-    thresholdInput.addEventListener("input", () => {
-      const next = Number(thresholdInput.value);
-      if (!Number.isFinite(next) || next <= 0) return;
-      gustThreshold = next;
-      saveGustThreshold();
-      if (lastRows) renderDailyReport(lastRows);
+    thresholdControlsEl.appendChild(createThresholdSlider({
+      label: "강수량 기준",
+      value: precipThreshold,
+      min: 0,
+      max: 50,
+      step: 0.1,
+      format: formatPrecipThreshold,
+      onInput: next => {
+        if (!Number.isFinite(next) || next < 0) return;
+        precipThreshold = next;
+        savePrecipThreshold();
+        if (lastRows) renderDailyReport(lastRows);
+      }
+    }));
+  }
+
+  function createThresholdSlider({ label, value, min, max, step, format, onInput }) {
+    const wrap = document.createElement("label");
+    wrap.className = "threshold-control";
+
+    const labelEl = document.createElement("span");
+    labelEl.textContent = label;
+
+    const input = document.createElement("input");
+    input.type = "range";
+    input.min = String(min);
+    input.max = String(max);
+    input.step = String(step);
+    input.value = String(value);
+
+    const valueEl = document.createElement("span");
+    valueEl.className = "threshold-value";
+    valueEl.textContent = `${format(value)} 이하`;
+
+    input.addEventListener("input", () => {
+      const next = Number(input.value);
+      valueEl.textContent = `${format(next)} 이하`;
+      onInput(next);
     });
 
-    const unit = document.createElement("span");
-    unit.textContent = "m/s 이하";
-
-    thresholdLabel.appendChild(thresholdInput);
-    thresholdLabel.appendChild(unit);
-    controlsEl.appendChild(thresholdLabel);
-
-    const precipLabel = document.createElement("label");
-    precipLabel.className = "threshold-control";
-    precipLabel.textContent = "강수량 기준";
-
-    const precipInput = document.createElement("input");
-    precipInput.id = "precipThreshold";
-    precipInput.type = "number";
-    precipInput.min = "0";
-    precipInput.max = "50";
-    precipInput.step = "0.1";
-    precipInput.value = String(precipThreshold);
-    precipInput.addEventListener("input", () => {
-      const next = Number(precipInput.value);
-      if (!Number.isFinite(next) || next < 0) return;
-      precipThreshold = next;
-      savePrecipThreshold();
-      if (lastRows) renderDailyReport(lastRows);
-    });
-
-    const precipUnit = document.createElement("span");
-    precipUnit.textContent = "mm 이하";
-
-    precipLabel.appendChild(precipInput);
-    precipLabel.appendChild(precipUnit);
-    controlsEl.appendChild(precipLabel);
+    wrap.appendChild(labelEl);
+    wrap.appendChild(input);
+    wrap.appendChild(valueEl);
+    return wrap;
   }
 
   function qs(source) {
@@ -1086,11 +1110,19 @@
   }
 
   function gustThresholdText() {
-    return `${Number.isInteger(gustThreshold) ? gustThreshold.toFixed(0) : gustThreshold.toFixed(1)}m/s`;
+    return formatGustThreshold(gustThreshold);
   }
 
   function precipThresholdText() {
-    return `${Number.isInteger(precipThreshold) ? precipThreshold.toFixed(0) : precipThreshold.toFixed(1)}mm`;
+    return formatPrecipThreshold(precipThreshold);
+  }
+
+  function formatGustThreshold(value) {
+    return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}m/s`;
+  }
+
+  function formatPrecipThreshold(value) {
+    return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}mm`;
   }
 
   function updateCalmLabel() {
