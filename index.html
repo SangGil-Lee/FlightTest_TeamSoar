@@ -267,7 +267,9 @@
     #dailyReport td.date-col { color: var(--text); font-weight: 700; text-align: left; }
     #dailyReport td.avg-col { color: var(--avg); }
     #dailyReport td.max-col { color: var(--max); }
-    #dailyReport td.time-col { color: var(--muted); font-size: 12px; }
+    #dailyReport td.time-col { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    #dailyReport th.time-head { white-space: nowrap; }
+    #dailyReport th .head-break { display: block; }
 
     @media (max-width: 640px) {
       :root { --axisw: 56px; }
@@ -658,10 +660,13 @@
       ctx.fillText(`${String(r.hour).padStart(2, "0")}시`, x(i), H - plot.bottom + 14);
     });
 
-    // (현재) vertical dashed line + tag
+    let currentTagX = null;
+
+    // (현재) vertical guide line
     {
       const currentIdx = rows.findIndex(r => r.isCurrent);
       const tagX = currentIdx >= 0 ? x(currentIdx) : x(0);
+      currentTagX = tagX;
 
       ctx.save();
       ctx.strokeStyle = getCss("--avg");
@@ -673,37 +678,16 @@
       ctx.lineTo(tagX, plot.top + plot.height);
       ctx.stroke();
       ctx.restore();
-
-      const tagW = 42, tagH = 16, tagR = 8;
-
-      const drawCurrentTag = (tagY) => {
-        const tagLeft = Math.max(
-          2,
-          Math.min(W - padR - tagW - 2, tagX - tagW / 2)
-        );
-
-        roundRect(ctx, tagLeft, tagY, tagW, tagH, tagR);
-        ctx.fillStyle = "rgba(18,26,48,.94)";
-        ctx.fill();
-        ctx.strokeStyle = getCss("--avg");
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.fillStyle = getCss("--text");
-        ctx.font = "10px system-ui, -apple-system, Segoe UI, sans-serif";
-        ctx.textBaseline = "middle";
-        ctx.textAlign = "center";
-        ctx.fillText("(현재)", tagLeft + tagW / 2, tagY + tagH / 2);
-      };
-
-      // 위쪽과 아래쪽에 모두 현재 위치 표시
-      drawCurrentTag(plot.top + 6);
-      drawCurrentTag(H - plot.bottom + 28);
     }
 
     ctx.font = "12px system-ui, -apple-system, Segoe UI, sans-serif";
 
     drawLine(rows, r => r.avg, getCss("--avg"), x, y, yMax);
     drawLine(rows, r => r.max, getCss("--max"), x, y, yMax);
+
+    if (currentTagX !== null) {
+      drawCurrentTags(currentTagX, plot, W, H, padR);
+    }
 
   }
 
@@ -810,6 +794,32 @@
     ctx.quadraticCurveTo(x, y, x + rr, y);
   }
 
+  function drawCurrentTags(tagX, plot, W, H, padR) {
+    const tagW = 42, tagH = 16, tagR = 8;
+
+    const drawCurrentTag = (tagY) => {
+      const tagLeft = Math.max(
+        2,
+        Math.min(W - padR - tagW - 2, tagX - tagW / 2)
+      );
+
+      roundRect(ctx, tagLeft, tagY, tagW, tagH, tagR);
+      ctx.fillStyle = "rgba(18,26,48,.96)";
+      ctx.fill();
+      ctx.strokeStyle = getCss("--avg");
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = getCss("--text");
+      ctx.font = "10px system-ui, -apple-system, Segoe UI, sans-serif";
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "center";
+      ctx.fillText("(현재)", tagLeft + tagW / 2, tagY + tagH / 2);
+    };
+
+    drawCurrentTag(Math.max(4, plot.top - tagH - 8));
+    drawCurrentTag(H - plot.bottom + 28);
+  }
+
   function drawLine(rows, getter, color, x, y, yMax) {
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
@@ -878,16 +888,16 @@
     </div>
     <table>
       <colgroup>
-        <col style="width:26%">
         <col style="width:20%">
-        <col style="width:14%">
-        <col style="width:26%">
-        <col style="width:14%">
+        <col style="width:20%">
+        <col style="width:18%">
+        <col style="width:24%">
+        <col style="width:18%">
       </colgroup>
       <thead><tr>
         <th style="text-align:left">날짜</th>
-        <th>최저<br>평균풍속</th><th>시각</th>
-        <th>최저<br>최대풍속</th><th>시각</th>
+        <th><span class="head-break">최저</span>평균풍속</th><th class="time-head">시각</th>
+        <th><span class="head-break">최저</span>최대풍속</th><th class="time-head">시각</th>
       </tr></thead>
       <tbody>${rows_html}</tbody>
     </table>`;
