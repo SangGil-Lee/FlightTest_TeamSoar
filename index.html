@@ -14,6 +14,7 @@
       --avg: #7dd3fc;
       --max: #fca5a5;
       --rain: #60a5fa;
+      --current: #fbbf24;
       --line: rgba(255,255,255,.18);
       --day: rgba(255,255,255,.035);
       --midnight: rgba(255,255,255,.52);
@@ -854,9 +855,11 @@
       currentTagX = tagX;
 
       ctx.save();
-      ctx.strokeStyle = getCss("--avg");
-      ctx.globalAlpha = 0.55;
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = getCss("--current");
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 2.4;
+      ctx.shadowColor = "rgba(251,191,36,.35)";
+      ctx.shadowBlur = 6;
       ctx.setLineDash([]);
       ctx.beginPath();
       ctx.moveTo(tagX, plot.top);
@@ -991,8 +994,8 @@
       roundRect(ctx, tagLeft, tagY, tagW, tagH, tagR);
       ctx.fillStyle = "rgba(18,26,48,.96)";
       ctx.fill();
-      ctx.strokeStyle = getCss("--avg");
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = getCss("--current");
+      ctx.lineWidth = 1.4;
       ctx.stroke();
       ctx.fillStyle = getCss("--text");
       ctx.font = "10px system-ui, -apple-system, Segoe UI, sans-serif";
