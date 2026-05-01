@@ -107,7 +107,7 @@
     }
     .threshold-control {
       display: grid;
-      grid-template-columns: auto minmax(120px, 1fr) auto;
+      grid-template-columns: auto 34px minmax(120px, 1fr) 34px auto;
       align-items: center;
       gap: 7px;
       padding: 10px 12px;
@@ -122,6 +122,16 @@
       width: 100%;
       accent-color: var(--avg);
       cursor: ew-resize;
+    }
+    .threshold-step {
+      width: 34px;
+      height: 34px;
+      display: inline-grid;
+      place-items: center;
+      padding: 0;
+      border-radius: 10px;
+      font-size: 18px;
+      line-height: 1;
     }
     .threshold-value {
       color: var(--muted);
@@ -326,7 +336,14 @@
       .model-chip { font-size: 12px; padding: 7px 9px; }
       .chart-wrap { padding: 10px; }
       .threshold-panel { grid-template-columns: 1fr; }
-      .threshold-control { grid-template-columns: auto minmax(90px, 1fr) auto; }
+      .threshold-control {
+        grid-template-columns: auto 38px minmax(90px, 1fr) 38px auto;
+        gap: 6px;
+      }
+      .threshold-step {
+        width: 38px;
+        height: 38px;
+      }
       .floating-x-dates { right: 10px; bottom: 36px; }
     }
   </style>
@@ -534,18 +551,35 @@
     input.step = String(step);
     input.value = String(value);
 
+    const decButton = document.createElement("button");
+    decButton.type = "button";
+    decButton.className = "threshold-step";
+    decButton.textContent = "-";
+
+    const incButton = document.createElement("button");
+    incButton.type = "button";
+    incButton.className = "threshold-step";
+    incButton.textContent = "+";
+
     const valueEl = document.createElement("span");
     valueEl.className = "threshold-value";
     valueEl.textContent = `${format(value)} 이하`;
 
-    input.addEventListener("input", () => {
-      const next = Number(input.value);
-      valueEl.textContent = `${format(next)} 이하`;
-      onInput(next);
-    });
+    const applyValue = (next) => {
+      const clamped = clampToStep(next, min, max, step);
+      input.value = String(clamped);
+      valueEl.textContent = `${format(clamped)} 이하`;
+      onInput(clamped);
+    };
+
+    input.addEventListener("input", () => applyValue(Number(input.value)));
+    decButton.addEventListener("click", () => applyValue(Number(input.value) - step));
+    incButton.addEventListener("click", () => applyValue(Number(input.value) + step));
 
     wrap.appendChild(labelEl);
+    wrap.appendChild(decButton);
     wrap.appendChild(input);
+    wrap.appendChild(incButton);
     wrap.appendChild(valueEl);
     return wrap;
   }
@@ -1116,6 +1150,13 @@
 
   function precipThresholdText() {
     return formatPrecipThreshold(precipThreshold);
+  }
+
+  function clampToStep(value, min, max, step) {
+    const clamped = Math.min(Math.max(value, min), max);
+    const decimals = String(step).split(".")[1]?.length || 0;
+    const snapped = Math.round((clamped - min) / step) * step + min;
+    return Number(Math.min(Math.max(snapped, min), max).toFixed(decimals));
   }
 
   function formatGustThreshold(value) {
