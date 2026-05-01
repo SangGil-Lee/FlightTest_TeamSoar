@@ -417,7 +417,7 @@
     const q = new URLSearchParams({
       latitude: POINT.lat,
       longitude: POINT.lon,
-      hourly: "wind_speed_10m,wind_gusts_10m",
+      hourly: "wind_speed_10m,wind_gusts_10m,precipitation",
       wind_speed_unit: "ms",
       timezone: "Asia/Seoul",
       forecast_days: String(DAYS),
@@ -439,7 +439,8 @@
       name: source.name,
       times: j.hourly.time,
       speed: j.hourly.wind_speed_10m,
-      gust: j.hourly.wind_gusts_10m || j.hourly.wind_speed_10m
+      gust: j.hourly.wind_gusts_10m || j.hourly.wind_speed_10m,
+      precipitation: j.hourly.precipitation || []
     };
   }
 
@@ -480,6 +481,7 @@
     const rows = hours.map(time => {
       const speeds = [];
       const gusts = [];
+      const precipitations = [];
       const used = [];
 
       for (const r of results) {
@@ -487,8 +489,10 @@
         if (idx >= 0) {
           const s = Number(r.speed[idx]);
           const g = Number(r.gust[idx]);
+          const p = Number(r.precipitation?.[idx]);
           if (Number.isFinite(s)) speeds.push(s);
           if (Number.isFinite(g)) gusts.push(g);
+          if (Number.isFinite(p)) precipitations.push(p);
           if (Number.isFinite(s) || Number.isFinite(g)) used.push(r.name);
         }
       }
@@ -501,6 +505,8 @@
         isCurrent: time === nowKey,
         avg: speeds.length ? mean(speeds) : null,
         max: gusts.length ? Math.max(...gusts) : null,
+        precip: precipitations.length ? Math.max(...precipitations) : 0,
+        isRain: precipitations.some(v => v > 0),
         n: Math.max(speeds.length, gusts.length),
         used
       };
@@ -873,8 +879,9 @@
     const nowDate = keyOfLocalHour(roundHourKST()).slice(0, 10);
     const rows_html = dates.map(date => {
       const { dateText, rows: dr } = byDate[date];
-      const validAvg = dr.filter(r => Number.isFinite(r.avg));
-      const validMax = dr.filter(r => Number.isFinite(r.max));
+      const dryRows = dr.filter(r => !r.isRain);
+      const validAvg = dryRows.filter(r => Number.isFinite(r.avg));
+      const validMax = dryRows.filter(r => Number.isFinite(r.max));
       if (!validAvg.length) return "";
 
       const minAvgRow = validAvg.reduce((a, b) => a.avg < b.avg ? a : b);
