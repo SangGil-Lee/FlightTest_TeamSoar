@@ -626,31 +626,15 @@
     if (!groups.length) return;
 
     groups.forEach((g, gi) => {
-      if (gi % 2 === 1) {
-        ctx.fillStyle = getCss("--day");
-        ctx.fillRect(g.left, plot.top, g.right - g.left, plot.height);
-      }
-    });
-
-    groups.forEach((g, gi) => {
       if (gi === 0) return;
       const xx = g.left;
       ctx.strokeStyle = getCss("--midnight");
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 2;
       ctx.setLineDash([]);
       ctx.beginPath();
       ctx.moveTo(xx, plot.top - 8);
       ctx.lineTo(xx, plot.top + plot.height + 12);
       ctx.stroke();
-
-      ctx.strokeStyle = "rgba(255,255,255,.18)";
-      ctx.lineWidth = 1;
-      ctx.setLineDash([6, 7]);
-      ctx.beginPath();
-      ctx.moveTo(xx + 5, plot.top);
-      ctx.lineTo(xx + 5, plot.top + plot.height);
-      ctx.stroke();
-      ctx.setLineDash([]);
     });
 
     updateFloatingDates(rows, x, W);
