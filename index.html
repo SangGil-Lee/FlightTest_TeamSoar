@@ -281,7 +281,7 @@
       .controls { gap: 6px; }
       .model-chip { font-size: 12px; padding: 7px 9px; }
       .chart-wrap { padding: 10px; }
-      .floating-x-dates { right: 10px; bottom: 86px; }
+      .floating-x-dates { right: 10px; bottom: 24px; }
     }
   </style>
 </head>
@@ -817,7 +817,7 @@
     };
 
     drawCurrentTag(Math.max(4, plot.top - tagH - 8));
-    drawCurrentTag(H - plot.bottom + 28);
+    drawCurrentTag(H - plot.bottom + 30);
   }
 
   function drawLine(rows, getter, color, x, y, yMax) {
