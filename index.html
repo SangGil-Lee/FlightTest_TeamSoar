@@ -264,6 +264,13 @@
       border-bottom: 1px solid rgba(255,255,255,.05);
     }
     #dailyReport tr:last-child td { border-bottom: none; }
+    #dailyReport tr.today-row td {
+      background: rgba(251,191,36,.09);
+      color: #fde68a;
+    }
+    #dailyReport tr.today-row td.date-col {
+      color: #fbbf24;
+    }
     #dailyReport td.date-col { color: var(--text); font-weight: 700; text-align: left; }
     #dailyReport td.avg-col { color: var(--avg); }
     #dailyReport td.max-col { color: var(--max); }
@@ -873,12 +880,13 @@
       const minAvgRow = validAvg.reduce((a, b) => a.avg < b.avg ? a : b);
       const minMaxRow = validMax.length ? validMax.reduce((a, b) => a.max < b.max ? a : b) : null;
       const isPast = date < nowDate;
+      const isToday = date === nowDate;
 
-      return `<tr${isPast ? ' style="opacity:.5"' : ''}>
+      return `<tr${isToday ? ' class="today-row"' : ''}${isPast ? ' style="opacity:.5"' : ''}>
         <td class="date-col">${dateText}</td>
-        <td class="avg-col">${minAvgRow.avg.toFixed(1)} m/s</td>
+        <td class="avg-col">${minAvgRow.avg.toFixed(1)}</td>
         <td class="time-col">${String(minAvgRow.hour).padStart(2,"0")}시</td>
-        <td class="max-col">${minMaxRow ? minMaxRow.max.toFixed(1) + " m/s" : "--"}</td>
+        <td class="max-col">${minMaxRow ? minMaxRow.max.toFixed(1) : "--"}</td>
         <td class="time-col">${minMaxRow ? String(minMaxRow.hour).padStart(2,"0") + "시" : "--"}</td>
       </tr>`;
     }).join("");
